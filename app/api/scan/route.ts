@@ -90,14 +90,24 @@ async function fetchPublicPage(input: URL) {
   throw new Error("Too many redirects.");
 }
 
+type FindingCategory = "security" | "reliability" | "ux" | "seo" | "other";
 type Finding = {
   name: string;
   status: "pass" | "warn" | "fail";
   detail: string;
+  category: FindingCategory;
 };
 
+function categoryFor(name: string): FindingCategory {
+  if (["Content-Security-Policy", "Strict-Transport-Security", "X-Content-Type-Options", "Referrer-Policy", "Permissions-Policy", "HTTPS", "Possible exposed secret", "Public secret pattern"].includes(name)) return "security";
+  if (["HTTP response", "HTML document"].includes(name)) return "reliability";
+  if (name === "Mobile viewport") return "ux";
+  if (["Page title", "Meta description"].includes(name)) return "seo";
+  return "other";
+}
+
 function addFinding(findings: Finding[], name: string, status: Finding["status"], detail: string, penalty = 0) {
-  findings.push({ name, status, detail });
+  findings.push({ name, status, detail, category: categoryFor(name) });
   return penalty;
 }
 
@@ -168,10 +178,10 @@ export async function POST(req: Request) {
 
     for (const [key, label, penalty] of securityHeaders) {
       if (headers[key]) {
-        findings.push({ name: label, status: "pass", detail: "Header is present." });
+        findings.push({ name: label, status: "pass", detail: "Header is present.", category: "security" });
       } else {
         score -= penalty;
-        findings.push({ name: label, status: "warn", detail: "Header was not observed in the response." });
+        findings.push({ name: label, status: "warn", detail: "Header was not observed in the response.", category: "security" });
       }
     }
 
@@ -184,43 +194,39 @@ export async function POST(req: Request) {
 
     const contentType = headers["content-type"] || "";
     if (contentType.includes("text/html")) {
-      findings.push({ name: "HTML document", status: "pass", detail: "The response declares an HTML content type." });
+      findings.push({ name: "HTML document", status: "pass", detail: "The response declares an HTML content type." , category: categoryFor("HTML document") });
     } else {
       score -= 8;
       findings.push({ name: "HTML document", status: "warn", detail: `The response content type is ${contentType || "unknown"}, so page-level checks may be incomplete.` });
     }
 
     if (/<title\b[^>]*>[\s\S]*?<\/title>/i.test(html)) {
-      findings.push({ name: "Page title", status: "pass", detail: "A document title was detected." });
+      findings.push({ name: "Page title", status: "pass", detail: "A document title was detected." , category: categoryFor("Page title") });
     } else {
       score -= 5;
-      findings.push({ name: "Page title", status: "warn", detail: "No HTML title was observed." });
+      findings.push({ name: "Page title", status: "warn", detail: "No HTML title was observed." , category: categoryFor("Page title") });
     }
 
     if (/<meta\s+[^>]*name=["']viewport["']/i.test(html)) {
-      findings.push({ name: "Mobile viewport", status: "pass", detail: "A viewport meta tag was detected." });
+      findings.push({ name: "Mobile viewport", status: "pass", detail: "A viewport meta tag was detected." , category: categoryFor("Mobile viewport") });
     } else {
       score -= 2;
-      findings.push({ name: "Mobile viewport", status: "warn", detail: "No viewport meta tag was observed. Mobile rendering may still work, but this is a compatibility signal." });
+      findings.push({ name: "Mobile viewport", status: "warn", detail: "No viewport meta tag was observed. Mobile rendering may still work, but this is a compatibility signal." , category: categoryFor("Mobile viewport") });
     }
 
     if (/<meta\s+[^>]*name=["']description["']/i.test(html)) {
-      findings.push({ name: "Meta description", status: "pass", detail: "A meta description was detected." });
+      findings.push({ name: "Meta description", status: "pass", detail: "A meta description was detected." , category: categoryFor("Meta description") });
     } else {
       score -= 1;
-      findings.push({ name: "Meta description", status: "warn", detail: "No meta description was observed. This is primarily an SEO/share-preview signal, not proof of a security issue." });
+      findings.push({ name: "Meta description", status: "warn", detail: "No meta description was observed. This is primarily an SEO/share-preview signal, not proof of a security issue." , category: categoryFor("Meta description") });
     }
 
     const secretPattern = /\b(?:sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-[0-9A-Za-z-]{20,})\b/;
     if (secretPattern.test(html)) {
       score -= 30;
-      findings.push({
-        name: "Possible exposed secret",
-        status: "fail",
-        detail: "A token-like pattern was detected in the fetched HTML. Treat it as potentially exposed and rotate it after checking the deployed bundle.",
-      });
+      findings.push({ name: "Possible exposed secret", status: "fail", detail: "A token-like pattern was detected in the fetched HTML. Treat it as potentially exposed and rotate it after checking the deployed bundle.", category: categoryFor("Possible exposed secret") });
     } else {
-      findings.push({ name: "Public secret pattern", status: "pass", detail: "No common token pattern was detected in the fetched HTML." });
+      findings.push({ name: "Public secret pattern", status: "pass", detail: "No common token pattern was detected in the fetched HTML." , category: categoryFor("Public secret pattern") });
     }
 
     score = Math.max(0, Math.min(100, score));
@@ -233,8 +239,8 @@ export async function POST(req: Request) {
           : "MORE REVIEW NEEDED";
 
     const baseFixPrompt =
-      "Review my deployed application using these LaunchLens findings:\n\n" +
-      findings.filter((f) => f.status !== "pass").map((f) => `- ${f.name}: ${f.status} — ${f.detail}`).join("\n") +
+      "Review my deployed application using these LaunchLens findings. Prioritize security and reliability before UX or SEO improvements.\\n\\n" +
+      findings.filter((f) => f.status !== "pass").map((f) => `- [${f.category.toUpperCase()}] ${f.name}: ${f.status} — ${f.detail}`).join("\\n") +
       "\n\nInspect the relevant project files before changing anything. Implement the safest fixes, avoid unrelated changes, and run the project's tests/build.";
 
     const ai = await improveWithGroq(findings, score).catch(() => null);
