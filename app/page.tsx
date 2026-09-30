@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowRight, CheckCircle2, ShieldAlert, Copy, Loader2, Globe2, Sparkles } from "lucide-react";
 
 type Finding = { name: string; status: "pass" | "warn" | "fail"; detail: string; category: "security" | "reliability" | "ux" | "seo" | "other"; penalty?: number };
-type Result = { score: number; verdict: string; finalUrl: string; redirects: number; durationMs: number; scannedAt: string; penaltyTotal: number; categoryPenalties: Record<"security" | "reliability" | "ux" | "seo" | "other", number>; summary: string; findings: Finding[]; fixPrompt: string; aiUsed: boolean };
+type Result = { score: number; verdict: string; finalUrl: string; redirects: number; durationMs: number; fetchDurationMs: number; aiDurationMs: number; scannedAt: string; penaltyTotal: number; categoryPenalties: Record<"security" | "reliability" | "ux" | "seo" | "other", number>; summary: string; findings: Finding[]; fixPrompt: string; aiUsed: boolean; aiStatus: string };
 
 
 export default function Home() {
@@ -97,7 +97,7 @@ function ResultView({ result }: { result: Result }) {
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
           <p className="text-xs uppercase tracking-widest text-zinc-500">Scan target</p>
           <p className="mt-2 truncate text-sm text-zinc-300">{result.finalUrl}</p>
-          <p className="mt-1 text-xs text-zinc-600">{result.redirects} redirect{result.redirects === 1 ? "" : "s"} followed · {result.durationMs} ms scan</p>
+          <p className="mt-1 text-xs text-zinc-600">{result.redirects} redirect{result.redirects === 1 ? "" : "s"} followed · {result.durationMs} ms total</p>
           <div className="mt-5 border-t border-zinc-900 pt-5">
             <p className="text-xs uppercase tracking-widest text-zinc-500">Status</p>
             <p className="mt-2 text-xl font-semibold">{result.verdict}</p>
@@ -108,6 +108,8 @@ function ResultView({ result }: { result: Result }) {
           </div>
         </div>
       </div>
+
+      <details className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6"><summary className="cursor-pointer list-none font-semibold">Scan details</summary><div className="mt-4 grid gap-2 text-xs sm:grid-cols-3"><div className="rounded-lg bg-zinc-900/70 p-3"><span className="text-zinc-600">Target fetch</span><div className="mt-1 text-zinc-300">{result.fetchDurationMs} ms</div></div><div className="rounded-lg bg-zinc-900/70 p-3"><span className="text-zinc-600">AI processing</span><div className="mt-1 text-zinc-300">{result.aiDurationMs} ms</div></div><div className="rounded-lg bg-zinc-900/70 p-3"><span className="text-zinc-600">Scanned</span><div className="mt-1 text-zinc-300">{new Date(result.scannedAt).toLocaleString()}</div></div></div></details>
 
       <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
