@@ -54,9 +54,9 @@ function isPrivateIPv6(ip: string) {
   // Unspecified, loopback, IPv4-mapped, link-local, unique-local and multicast.
   if (n === 0n || n === 1n || prefix(7) === 0xffn) return true;
   if (prefix(10) === (0xfe80n << 118n)) return true;
-  if (prefix(7) === (0xfc00n << 121n)) return true;
+  if (prefix(7) === (0xfc << 121n)) return true;
   if (prefix(96) === 0n || prefix(96) === (0xffffn << 80n)) return true;
-  return inRange(0xff000000000000000000000000000000n, 8, n);
+  return false;
 }
 
 function isBlockedAddress(address: string) {
