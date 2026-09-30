@@ -186,10 +186,10 @@ export async function POST(req: Request) {
     }
 
     if (response.status >= 200 && response.status < 400) {
-      findings.push({ name: "HTTP response", status: "pass", detail: `The page returned HTTP ${response.status}.` });
+      findings.push({ name: "HTTP response", status: "pass", detail: `The page returned HTTP ${response.status}.`, category: "reliability" });
     } else {
       score -= 20;
-      findings.push({ name: "HTTP response", status: "fail", detail: `The page returned HTTP ${response.status}.` });
+      findings.push({ name: "HTTP response", status: "fail", detail: `The page returned HTTP ${response.status}.`, category: "reliability" });
     }
 
     const contentType = headers["content-type"] || "";
@@ -197,7 +197,7 @@ export async function POST(req: Request) {
       findings.push({ name: "HTML document", status: "pass", detail: "The response declares an HTML content type." , category: categoryFor("HTML document") });
     } else {
       score -= 8;
-      findings.push({ name: "HTML document", status: "warn", detail: `The response content type is ${contentType || "unknown"}, so page-level checks may be incomplete.` });
+      findings.push({ name: "HTML document", status: "warn", detail: `The response content type is ${contentType || "unknown"}, so page-level checks may be incomplete.`, category: "reliability" });
     }
 
     if (/<title\b[^>]*>[\s\S]*?<\/title>/i.test(html)) {
