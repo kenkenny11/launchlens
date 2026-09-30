@@ -8,6 +8,30 @@ const MAX_HTML = 300_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 4;
 
+async function readBodyLimit(response: Response, maxBytes: number) {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = "";
+
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = maxBytes - total;
+      const chunk = value.byteLength > remaining ? value.subarray(0, remaining) : value;
+      total += chunk.byteLength;
+      text += decoder.decode(chunk, { stream: total < maxBytes });
+      if (value.byteLength > remaining) break;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+
+  return text + (total >= maxBytes ? decoder.decode() : "");
+}
+
 function isPrivateIPv4(ip: string) {
   const parts = ip.split(".").map(Number);
   if (parts.length !== 4 || parts.some((n) => n < 0 || n > 255 || !Number.isInteger(n))) return true;
@@ -256,7 +280,7 @@ export async function POST(req: Request) {
     const response = fetched.response;
     const finalUrl = fetched.finalUrl;
     const redirects = fetched.redirects;
-    const html = (await response.text()).slice(0, MAX_HTML);
+    const html = await readBodyLimit(response, MAX_HTML);
     const headers = Object.fromEntries(response.headers.entries());
     const findings: Finding[] = [];
     let score = 100;
