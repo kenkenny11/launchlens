@@ -58,7 +58,9 @@ export default function Home() {
 
         {result && <ResultView result={result}/>}
       </div>
-      <footer className="mx-auto max-w-6xl border-t border-zinc-900 px-5 py-8 text-xs text-zinc-600 sm:px-8">LaunchLens reports observable signals. A public scan cannot prove that an application is secure.</footer>
+      <footer className="mx-auto max-w-6xl border-t border-zinc-900 px-5 py-8 text-xs leading-5 text-zinc-600 sm:px-8">
+        LaunchLens reports observable public signals only. It does not inspect private source code, authenticated routes, databases, or server infrastructure, and a scan cannot prove that an application is secure.
+      </footer>
     </main>
   );
 }
