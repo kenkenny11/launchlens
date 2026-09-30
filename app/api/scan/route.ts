@@ -174,9 +174,10 @@ async function improveWithGroq(findings: Finding[], score: number) {
             instruction:
               "Write a concise summary under 70 words. Then write a practical coding-agent prompt addressing only warnings and failures. " +
               "Group fixes by category and prioritize SECURITY/EXPOSURE, then RELIABILITY, then UX/SEO. " +
-              "For security headers, inspect the actual framework and deployment configuration before choosing implementation; " +
-              "never assume .htaccess, nginx, Apache, or Express. Treat viewport as UX and meta description as SEO. " +
-              "Tell the coding agent to inspect relevant files first, make minimal safe changes, and run tests/build before deployment.",
+              "For security headers, inspect the actual framework, hosting platform, middleware, response handling, and existing policy configuration before choosing implementation or values; " +
+              "never assume .htaccess, nginx, Apache, Express, or any other server type. Do not prescribe exact HSTS max-age, includeSubDomains, CSP directives, nonces, hashes, or Permissions-Policy feature allowances unless the target project's architecture and required resources justify them. " +
+              "Avoid blindly copying example header policies: preserve required application functionality and use the least-permissive compatible policy. Treat viewport as UX and meta description as SEO. " +
+              "Tell the coding agent to inspect relevant files first, identify required scripts/styles/assets and deployment behavior, make minimal safe changes, verify headers and page metadata, and run tests/build before deployment.",
           }),
         },
       ],
