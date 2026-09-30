@@ -98,10 +98,11 @@ function ResultView({ result }: { result: Result }) {
           <p className="mt-1 text-xs text-zinc-600">{result.redirects} redirect{result.redirects === 1 ? "" : "s"} followed</p>
           <div className="mt-5 border-t border-zinc-900 pt-5">
             <p className="text-xs uppercase tracking-widest text-zinc-500">Status</p>
-          <p className="mt-2 text-xl font-semibold">{result.verdict}</p>
-          <div className="mt-6 grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-zinc-900 p-3"><div className="text-2xl font-semibold">{passed}</div><div className="text-xs text-zinc-500">Passed</div></div>
-            <div className="rounded-xl bg-zinc-900 p-3"><div className="text-2xl font-semibold">{issues}</div><div className="text-xs text-zinc-500">Needs work</div></div>
+            <p className="mt-2 text-xl font-semibold">{result.verdict}</p>
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-zinc-900 p-3"><div className="text-2xl font-semibold">{passed}</div><div className="text-xs text-zinc-500">Passed</div></div>
+              <div className="rounded-xl bg-zinc-900 p-3"><div className="text-2xl font-semibold">{issues}</div><div className="text-xs text-zinc-500">Needs work</div></div>
+            </div>
           </div>
         </div>
       </div>
