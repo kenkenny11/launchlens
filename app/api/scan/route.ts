@@ -154,6 +154,19 @@ function isStrongCsp(value: string) {
   return v.includes("default-src") || v.includes("script-src") || v.includes("object-src") || v.includes("base-uri");
 }
 
+
+function getMetaContent(html: string, name: string) {
+  const tags = html.match(/<meta\\b[^>]*>/gi) || [];
+  const wanted = name.toLowerCase();
+  for (const tag of tags) {
+    const nameMatch = tag.match(/\\bname\\s*=\\s*(["'])(.*?)\\1/i);
+    if (nameMatch?.[2]?.trim().toLowerCase() !== wanted) continue;
+    const contentMatch = tag.match(/\\bcontent\\s*=\\s*(["'])(.*?)\\1/i);
+    return contentMatch?.[2] ?? "";
+  }
+  return null;
+}
+
 function isValidHsts(value: string) {
   const match = value.match(/(?:^|;)\s*max-age\s*=\s*(\d+)/i);
   return Boolean(match && Number(match[1]) >= 15552000);
@@ -415,18 +428,17 @@ export async function POST(req: Request) {
       findings.push({ name: "Page title", status: "warn", detail: "No HTML title was observed.", category: "seo", penalty: 5 });
     }
 
-    if (/<meta\s+[^>]*(?:name=["']viewport["'][^>]*content=|content=["'][^"']+["'][^>]*name=["']viewport["'])/i.test(html)) {
+    if (getMetaContent(html, "viewport")?.trim()) {
       findings.push({ name: "Mobile viewport", status: "pass", detail: "A viewport meta tag with a content value was detected.", category: "ux" });
     } else {
       score -= 2;
       findings.push({ name: "Mobile viewport", status: "warn", detail: "No viewport meta tag was observed. Mobile rendering may still work, but this is a compatibility signal.", category: "ux", penalty: 2 });
     }
 
-    const descriptionMatch = html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
-      html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i);
+    const descriptionMatch = getMetaContent(html, "description");
     if (descriptionMatch?.[1]?.trim()) {
       findings.push({ name: "Meta description", status: "pass", detail: "A non-empty meta description was detected.", category: "seo" });
-    } else if (descriptionMatch) {
+    } else if (descriptionMatch !== null) {
       score -= 1;
       findings.push({ name: "Meta description", status: "warn", detail: "A meta description tag was found, but its content is empty.", category: "seo", penalty: 1 });
     } else {
