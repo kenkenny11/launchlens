@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, CheckCircle2, ShieldAlert, Copy, Loader2, Globe2, LockKeyhole, Smartphone, Sparkles } from "lucide-react";
+import { ArrowRight, CheckCircle2, ShieldAlert, Copy, Loader2, Globe2, Sparkles } from "lucide-react";
 
 type Finding = { name: string; status: "pass" | "warn" | "fail"; detail: string };
 type Result = { score: number; verdict: string; summary: string; findings: Finding[]; fixPrompt: string };
