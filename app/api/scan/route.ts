@@ -429,6 +429,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       score,
       verdict,
+      finalUrl: finalUrl.toString(),
+      redirects,
       summary:
         ai?.summary ||
         "This score reflects signals observable from the public URL. It is not a complete security audit and does not inspect private source code, authenticated routes, databases, or server infrastructure.",
