@@ -32,6 +32,40 @@ function isPrivateIPv6(ip: string) {
   return false;
 }
 
+async function assertPublicHost(url: URL) {
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "metadata.google.internal" ||
+    host === "metadata.google" ||
+    host === "host.docker.internal"
+  ) {
+    throw new Error("Private or metadata hosts are not allowed.");
+  }
+
+  const ipType = net.isIP(host);
+  if (ipType === 4 && isPrivateIPv4(host)) {
+    throw new Error("Private IPv4 addresses are not allowed.");
+  }
+  if (ipType === 6 && isPrivateIPv6(host)) {
+    throw new Error("Private IPv6 addresses are not allowed.");
+  }
+
+  const records = await dns.lookup(host, { all: true, verbatim: true });
+  if (!records.length) throw new Error("Could not resolve the host.");
+
+  for (const record of records) {
+    if (record.family === 4 && isPrivateIPv4(record.address)) {
+      throw new Error("The host resolves to a private IPv4 address.");
+    }
+    if (record.family === 6 && isPrivateIPv6(record.address)) {
+      throw new Error("The host resolves to a private IPv6 address.");
+    }
+  }
+}
+
 async function parsePublicUrl(value: string): Promise<URL | null> {
   try {
     const url = new URL(value);
