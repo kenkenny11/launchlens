@@ -127,6 +127,7 @@ type Finding = {
   status: "pass" | "warn" | "fail";
   detail: string;
   category: FindingCategory;
+  penalty?: number;
 };
 
 function categoryFor(name: string): FindingCategory {
@@ -309,10 +310,10 @@ export async function POST(req: Request) {
     const csp = headers["content-security-policy"];
     if (!hasHeader(headers, "content-security-policy")) {
       score -= 8;
-      findings.push({ name: "Content-Security-Policy", status: "warn", detail: "Header was not observed in the final response.", category: "security" });
+      findings.push({ name: "Content-Security-Policy", status: "warn", detail: "Header was not observed in the final response.", category: "security", penalty: 8 });
     } else if (!isStrongCsp(csp)) {
       score -= 3;
-      findings.push({ name: "Content-Security-Policy", status: "warn", detail: "A CSP header is present, but common source directives were not observed.", category: "security" });
+      findings.push({ name: "Content-Security-Policy", status: "warn", detail: "A CSP header is present, but common source directives were not observed.", category: "security", penalty: 3 });
     } else {
       findings.push({ name: "Content-Security-Policy", status: "pass", detail: "A CSP header with common source directives is present.", category: "security" });
     }
@@ -321,10 +322,10 @@ export async function POST(req: Request) {
     if (finalUrl.protocol === "https:") {
       if (!hasHeader(headers, "strict-transport-security")) {
         score -= 8;
-        findings.push({ name: "Strict-Transport-Security", status: "warn", detail: "Header was not observed in the final HTTPS response.", category: "security" });
+        findings.push({ name: "Strict-Transport-Security", status: "warn", detail: "Header was not observed in the final HTTPS response.", category: "security", penalty: 8 });
       } else if (!isValidHsts(hsts)) {
         score -= 3;
-        findings.push({ name: "Strict-Transport-Security", status: "warn", detail: "HSTS is present, but max-age is missing or shorter than 180 days.", category: "security" });
+        findings.push({ name: "Strict-Transport-Security", status: "warn", detail: "HSTS is present, but max-age is missing or shorter than 180 days.", category: "security", penalty: 3 });
       } else {
         findings.push({ name: "Strict-Transport-Security", status: "pass", detail: "HSTS is present with max-age of at least 180 days.", category: "security" });
       }
@@ -335,10 +336,10 @@ export async function POST(req: Request) {
     const xcto = headers["x-content-type-options"];
     if (!hasHeader(headers, "x-content-type-options")) {
       score -= 6;
-      findings.push({ name: "X-Content-Type-Options", status: "warn", detail: "Header was not observed in the final response.", category: "security" });
+      findings.push({ name: "X-Content-Type-Options", status: "warn", detail: "Header was not observed in the final response.", category: "security", penalty: 6 });
     } else if (!isNoSniff(xcto)) {
       score -= 2;
-      findings.push({ name: "X-Content-Type-Options", status: "warn", detail: "Header is present but is not set to nosniff.", category: "security" });
+      findings.push({ name: "X-Content-Type-Options", status: "warn", detail: "Header is present but is not set to nosniff.", category: "security", penalty: 2 });
     } else {
       findings.push({ name: "X-Content-Type-Options", status: "pass", detail: "Header is set to nosniff.", category: "security" });
     }
@@ -346,10 +347,10 @@ export async function POST(req: Request) {
     const referrer = headers["referrer-policy"];
     if (!hasHeader(headers, "referrer-policy")) {
       score -= 5;
-      findings.push({ name: "Referrer-Policy", status: "warn", detail: "Header was not observed in the final response.", category: "security" });
+      findings.push({ name: "Referrer-Policy", status: "warn", detail: "Header was not observed in the final response.", category: "security", penalty: 5 });
     } else if (!isUsefulReferrerPolicy(referrer)) {
       score -= 2;
-      findings.push({ name: "Referrer-Policy", status: "warn", detail: "Header is present but uses an unrecognized policy value.", category: "security" });
+      findings.push({ name: "Referrer-Policy", status: "warn", detail: "Header is present but uses an unrecognized policy value.", category: "security", penalty: 2 });
     } else {
       findings.push({ name: "Referrer-Policy", status: "pass", detail: `Header uses ${referrer.trim()}.`, category: "security" });
     }
@@ -357,7 +358,7 @@ export async function POST(req: Request) {
     const permissions = headers["permissions-policy"];
     if (!hasHeader(headers, "permissions-policy")) {
       score -= 4;
-      findings.push({ name: "Permissions-Policy", status: "warn", detail: "Header was not observed in the final response.", category: "security" });
+      findings.push({ name: "Permissions-Policy", status: "warn", detail: "Header was not observed in the final response.", category: "security", penalty: 4 });
     } else {
       findings.push({ name: "Permissions-Policy", status: "pass", detail: "A Permissions-Policy header is present.", category: "security" });
     }
@@ -366,7 +367,7 @@ export async function POST(req: Request) {
       findings.push({ name: "HTTP response", status: "pass", detail: `The page returned HTTP ${response.status}.`, category: "reliability" });
     } else {
       score -= 20;
-      findings.push({ name: "HTTP response", status: "fail", detail: `The page returned HTTP ${response.status}.`, category: "reliability" });
+      findings.push({ name: "HTTP response", status: "fail", detail: `The page returned HTTP ${response.status}.`, category: "reliability", penalty: 20 });
     }
 
     if (redirects > 0) {
@@ -378,10 +379,10 @@ export async function POST(req: Request) {
       findings.push({ name: "Response time", status: "pass", detail: `The scan completed in about ${elapsedMs} ms.`, category: "reliability" });
     } else if (elapsedMs <= 7000) {
       score -= 2;
-      findings.push({ name: "Response time", status: "warn", detail: `The scan took about ${elapsedMs} ms. Slower responses may affect user experience.`, category: "reliability" });
+      findings.push({ name: "Response time", status: "warn", detail: `The scan took about ${elapsedMs} ms. Slower responses may affect user experience.`, category: "reliability", penalty: 2 });
     } else {
       score -= 5;
-      findings.push({ name: "Response time", status: "warn", detail: `The scan took about ${elapsedMs} ms. This is a high-latency signal for a public page.`, category: "reliability" });
+      findings.push({ name: "Response time", status: "warn", detail: `The scan took about ${elapsedMs} ms. This is a high-latency signal for a public page.`, category: "reliability", penalty: 5 });
     }
 
     const contentType = headers["content-type"] || "";
@@ -389,21 +390,21 @@ export async function POST(req: Request) {
       findings.push({ name: "HTML document", status: "pass", detail: "The response declares an HTML content type.", category: "reliability" });
     } else {
       score -= 8;
-      findings.push({ name: "HTML document", status: "warn", detail: `The response content type is ${contentType || "unknown"}, so page-level checks may be incomplete.`, category: "reliability" });
+      findings.push({ name: "HTML document", status: "warn", detail: `The response content type is ${contentType || "unknown"}, so page-level checks may be incomplete.`, category: "reliability", penalty: 8 });
     }
 
     if (/<title\b[^>]*>[\s\S]*?<\/title>/i.test(html)) {
       findings.push({ name: "Page title", status: "pass", detail: "A document title was detected.", category: "seo" });
     } else {
       score -= 5;
-      findings.push({ name: "Page title", status: "warn", detail: "No HTML title was observed.", category: "seo" });
+      findings.push({ name: "Page title", status: "warn", detail: "No HTML title was observed.", category: "seo", penalty: 5 });
     }
 
     if (/<meta\s+[^>]*(?:name=["']viewport["'][^>]*content=|content=["'][^"']+["'][^>]*name=["']viewport["'])/i.test(html)) {
       findings.push({ name: "Mobile viewport", status: "pass", detail: "A viewport meta tag with a content value was detected.", category: "ux" });
     } else {
       score -= 2;
-      findings.push({ name: "Mobile viewport", status: "warn", detail: "No viewport meta tag was observed. Mobile rendering may still work, but this is a compatibility signal.", category: "ux" });
+      findings.push({ name: "Mobile viewport", status: "warn", detail: "No viewport meta tag was observed. Mobile rendering may still work, but this is a compatibility signal.", category: "ux", penalty: 2 });
     }
 
     const descriptionMatch = html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
@@ -412,16 +413,16 @@ export async function POST(req: Request) {
       findings.push({ name: "Meta description", status: "pass", detail: "A non-empty meta description was detected.", category: "seo" });
     } else if (descriptionMatch) {
       score -= 1;
-      findings.push({ name: "Meta description", status: "warn", detail: "A meta description tag was found, but its content is empty.", category: "seo" });
+      findings.push({ name: "Meta description", status: "warn", detail: "A meta description tag was found, but its content is empty.", category: "seo", penalty: 1 });
     } else {
       score -= 1;
-      findings.push({ name: "Meta description", status: "warn", detail: "No meta description was observed. This is primarily an SEO/share-preview signal, not proof of a security issue.", category: "seo" });
+      findings.push({ name: "Meta description", status: "warn", detail: "No meta description was observed. This is primarily an SEO/share-preview signal, not proof of a security issue.", category: "seo", penalty: 1 });
     }
 
     const secretPattern = /\b(?:sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-[0-9A-Za-z-]{20,})\b/;
     if (secretPattern.test(html)) {
       score -= 30;
-      findings.push({ name: "Possible exposed secret", status: "fail", detail: "A token-like pattern was detected in the fetched HTML. Treat it as potentially exposed and rotate it after checking the deployed bundle.", category: "security" });
+      findings.push({ name: "Possible exposed secret", status: "fail", detail: "A token-like pattern was detected in the fetched HTML. Treat it as potentially exposed and rotate it after checking the deployed bundle.", category: "security", penalty: 30 });
     } else {
       findings.push({ name: "Public secret pattern", status: "pass", detail: "No common token pattern was detected in the fetched HTML.", category: "security" });
     }
@@ -445,11 +446,23 @@ export async function POST(req: Request) {
 
     const ai = await improveWithGroq(findings, score).catch(() => null);
 
+    const penaltyTotal = findings.reduce((total, finding) => total + (finding.penalty || 0), 0);
+    const categoryPenalties = (["security", "reliability", "ux", "seo", "other"] as const).reduce((acc, category) => {
+      acc[category] = findings.filter((finding) => finding.category === category).reduce((total, finding) => total + (finding.penalty || 0), 0);
+      return acc;
+    }, {} as Record<FindingCategory, number>);
+    const durationMs = Date.now() - startedAt;
+    const scannedAt = new Date().toISOString();
+
     return NextResponse.json({
       score,
       verdict,
       finalUrl: finalUrl.toString(),
       redirects,
+      durationMs,
+      scannedAt,
+      penaltyTotal,
+      categoryPenalties,
       summary:
         ai?.summary ||
         "This score reflects signals observable from the public URL. It is not a complete security audit and does not inspect private source code, authenticated routes, databases, or server infrastructure.",
