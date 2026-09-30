@@ -76,6 +76,16 @@ function ResultView({ result }: { result: Result }) {
           <p className="text-xs font-medium uppercase tracking-widest text-zinc-500">Observed launch score</p>
           <div className={"mt-2 text-6xl font-semibold tracking-tight " + scoreTone}>{result.score}<span className="text-2xl text-zinc-600">/100</span></div>
           <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400">{result.summary}</p>
+          <div className="mt-6 border-t border-zinc-900 pt-5">
+            <div className="flex items-center justify-between text-xs text-zinc-500"><span>Signal breakdown</span><span>100 starting points</span></div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(["security","reliability","ux","seo"] as const).map((category) => {
+                const items = result.findings.filter((f) => f.category === category);
+                const warnings = items.filter((f) => f.status !== "pass").length;
+                return items.length ? <span key={category} className="rounded-full bg-zinc-900 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-500">{category === "ux" ? "UX" : category}: {warnings ? warnings + " issue" + (warnings === 1 ? "" : "s") : "clear"}</span> : null;
+              })}
+            </div>
+          </div>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
           <p className="text-xs uppercase tracking-widest text-zinc-500">Scan target</p>
