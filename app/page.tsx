@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ArrowRight, CheckCircle2, ShieldAlert, Copy, Loader2, Globe2, Sparkles } from "lucide-react";
 
 type Finding = { name: string; status: "pass" | "warn" | "fail"; detail: string; category: "security" | "reliability" | "ux" | "seo" | "other" };
-type Result = { score: number; verdict: string; summary: string; findings: Finding[]; fixPrompt: string };
+type Result = { score: number; verdict: string; finalUrl: string; redirects: number; summary: string; findings: Finding[]; fixPrompt: string };
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -78,7 +78,11 @@ function ResultView({ result }: { result: Result }) {
           <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400">{result.summary}</p>
         </div>
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
-          <p className="text-xs uppercase tracking-widest text-zinc-500">Status</p>
+          <p className="text-xs uppercase tracking-widest text-zinc-500">Scan target</p>
+          <p className="mt-2 truncate text-sm text-zinc-300">{result.finalUrl}</p>
+          <p className="mt-1 text-xs text-zinc-600">{result.redirects} redirect{result.redirects === 1 ? "" : "s"} followed</p>
+          <div className="mt-5 border-t border-zinc-900 pt-5">
+            <p className="text-xs uppercase tracking-widest text-zinc-500">Status</p>
           <p className="mt-2 text-xl font-semibold">{result.verdict}</p>
           <div className="mt-6 grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-zinc-900 p-3"><div className="text-2xl font-semibold">{passed}</div><div className="text-xs text-zinc-500">Passed</div></div>
