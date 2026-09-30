@@ -158,10 +158,10 @@ function isStrongCsp(value: string) {
 function getMetaContent(html: string, name: string) {
   const tags = html.match(/<meta\b[^>]*>/gi) || [];
   const wanted = name.toLowerCase();
+  for (const tag of tags) {
     const nameMatch = tag.match(/\bname\s*=\s*(["'])(.*?)\1/i);
-    const nameMatch = tag.match(/\\bname\\s*=\\s*(["'])(.*?)\\1/i);
+    if (nameMatch?.[2]?.trim().toLowerCase() !== wanted) continue;
     const contentMatch = tag.match(/\bcontent\s*=\s*(["'])(.*?)\1/i);
-    const contentMatch = tag.match(/\\bcontent\\s*=\\s*(["'])(.*?)\\1/i);
     return contentMatch?.[2] ?? "";
   }
   return null;
