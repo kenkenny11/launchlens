@@ -77,6 +77,7 @@ async function parsePublicUrl(value: string): Promise<URL | null> {
   try {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return null;
+    if (url.port && !((url.protocol === "http:" && url.port === "80") || (url.protocol === "https:" && url.port === "443"))) return null;
     await assertPublicHost(url);
     return url;
   } catch {
