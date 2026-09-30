@@ -45,3 +45,13 @@ test("score deductions remain transparent", () => {
   assert.match(source, /categoryPenalties/);
   assert.match(source, /penalty\?: number/);
 });
+
+
+test("production response headers are configured outside HTML metadata", async () => {
+  const nextConfig = await readFile(new URL("../next.config.ts", import.meta.url), "utf8");
+  assert.match(nextConfig, /Content-Security-Policy/);
+  assert.match(nextConfig, /X-Content-Type-Options/);
+  assert.match(nextConfig, /Referrer-Policy/);
+  assert.match(nextConfig, /Permissions-Policy/);
+  assert.match(nextConfig, /source: "\/(.*)"/);
+});
