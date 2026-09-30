@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import dns from "node:dns/promises";
+import net from "node:net";
 
 export const runtime = "nodejs";
 
@@ -6,32 +8,93 @@ const MAX_HTML = 300_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 4;
 
-function parsePublicUrl(value: string): URL | null {
+function isPrivateIPv4(ip: string) {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((n) => n < 0 || n > 255 || !Number.isInteger(n))) return true;
+  return (
+    parts[0] === 0 ||
+    parts[0] === 10 ||
+    parts[0] === 127 ||
+    (parts[0] === 169 && parts[1] === 254) ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168) ||
+    (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127)
+  );
+}
+
+function ipv6ToBigInt(value: string): bigint | null {
+  let ip = value.toLowerCase().split("%")[0];
+  if (ip.includes(".")) {
+    const lastColon = ip.lastIndexOf(":");
+    const v4 = ip.slice(lastColon + 1);
+    if (!/^\d+(?:\.\d+){3}$/.test(v4)) return null;
+    const parts = v4.split(".").map(Number);
+    if (parts.some((n) => n > 255)) return null;
+    ip = ip.slice(0, lastColon + 1) +
+      ((parts[0] << 8) | parts[1]).toString(16) + ":" +
+      ((parts[2] << 8) | parts[3]).toString(16);
+  }
+  const pieces = ip.split("::");
+  if (pieces.length > 2) return null;
+  const left = pieces[0] ? pieces[0].split(":") : [];
+  const right = pieces.length === 2 && pieces[1] ? pieces[1].split(":") : [];
+  if ([...left, ...right].some((p) => !/^[0-9a-f]{1,4}$/.test(p))) return null;
+  const groups = pieces.length === 2 ? [...left, ...Array(8 - left.length - right.length).fill("0"), ...right] : left;
+  if (groups.length !== 8) return null;
+  return groups.reduce((n, group) => (n << 16n) | BigInt(parseInt(group, 16)), 0n);
+}
+
+function isPrivateIPv6(ip: string) {
+  const n = ipv6ToBigInt(ip);
+  if (n === null) return true;
+  const mask = (bits: number) => ((1n << BigInt(bits)) - 1n) << BigInt(128 - bits);
+  const prefix = (bits: number) => n & mask(bits);
+  const inRange = (start: bigint, bits: number, value: bigint) => value >= start && value < start + (1n << BigInt(128 - bits));
+
+  // Unspecified, loopback, IPv4-mapped, link-local, unique-local and multicast.
+  if (n === 0n || n === 1n || prefix(7) === 0xffn) return true;
+  if (prefix(10) === (0xfe80n << 118n)) return true;
+  if (prefix(7) === (0xfc00n << 121n)) return true;
+  if (prefix(96) === 0n || prefix(96) === (0xffffn << 80n)) return true;
+  return inRange(0xff000000000000000000000000000000n, 8, n);
+}
+
+function isBlockedAddress(address: string) {
+  if (net.isIP(address) === 4) return isPrivateIPv4(address);
+  if (net.isIP(address) === 6) return isPrivateIPv6(address);
+  return true;
+}
+
+async function assertPublicHost(url: URL) {
+  const host = url.hostname.toLowerCase();
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "metadata.google.internal" ||
+    host === "metadata.google" ||
+    host === "host.docker.internal"
+  ) {
+    throw new Error("The URL points to a blocked local or metadata host.");
+  }
+
+  if (net.isIP(host) && isBlockedAddress(host)) {
+    throw new Error("The URL points to a private or reserved IP address.");
+  }
+
+  if (!net.isIP(host)) {
+    const records = await dns.lookup(host, { all: true, verbatim: true });
+    if (!records.length || records.some((record) => isBlockedAddress(record.address))) {
+      throw new Error("The URL resolves to a private or reserved network address.");
+    }
+  }
+}
+
+async function parsePublicUrl(value: string): Promise<URL | null> {
   try {
     const url = new URL(value);
     if (!["http:", "https:"].includes(url.protocol)) return null;
     if (url.username || url.password) return null;
-    if (url.hostname === "localhost" || url.hostname.endsWith(".localhost")) return null;
-    if (url.hostname === "metadata.google.internal") return null;
-    if (url.hostname === "metadata.google") return null;
-    if (url.hostname === "host.docker.internal") return null;
-
-    const host = url.hostname.toLowerCase();
-    const ip = host.match(/^(?:\d{1,3}\.){3}\d{1,3}$/)?.[0];
-    if (ip) {
-      const parts = ip.split(".").map(Number);
-      if (
-        parts.some((n) => n > 255) ||
-        parts[0] === 10 ||
-        parts[0] === 127 ||
-        (parts[0] === 169 && parts[1] === 254) ||
-        (parts[0] === 192 && parts[1] === 168) ||
-        (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-        ip === "0.0.0.0"
-      ) return null;
-    }
-
-    if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) return null;
+    await assertPublicHost(url);
     return url;
   } catch {
     return null;
@@ -42,7 +105,7 @@ async function fetchPublicPage(input: URL) {
   let current = input;
 
   for (let i = 0; i <= MAX_REDIRECTS; i++) {
-    const checked = parsePublicUrl(current.toString());
+    const checked = await parsePublicUrl(current.toString());
     if (!checked) throw new Error("The URL or redirect target is not allowed.");
 
     const controller = new AbortController();
@@ -141,7 +204,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const input = typeof body?.url === "string" ? body.url.trim() : "";
-    const url = parsePublicUrl(input);
+    const url = await parsePublicUrl(input);
 
     if (!url) {
       return NextResponse.json(
