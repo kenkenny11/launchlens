@@ -129,7 +129,7 @@ function ResultView({ result }: { result: Result }) {
 
       <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
-          <div><h2 className="font-semibold">AI fix prompt</h2><p className="mt-1 text-xs text-zinc-500">{result.aiUsed ? "Generated from the observed findings." : "Fallback prompt generated from the observed findings."}</p></div>
+          <div><h2 className="font-semibold">AI fix prompt</h2><p className="mt-1 text-xs text-zinc-500">{result.aiUsed ? "AI analysis generated this prompt." : `AI unavailable (${result.aiStatus.replace("_", " ")}); deterministic fallback used.`}</p></div>
           <button onClick={copy} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-xs hover:bg-zinc-900"><Copy size={14}/>Copy</button>
         </div>
         <pre className="mt-5 whitespace-pre-wrap rounded-xl bg-black/40 p-4 text-xs leading-6 text-zinc-300">{result.fixPrompt}</pre>
