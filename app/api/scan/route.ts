@@ -239,7 +239,7 @@ async function improveWithGroq(findings: Finding[], score: number) {
   }
   clearTimeout(aiTimer);
 
-  if (!response.ok) return { result: null, reason: response.status === 429 ? "rate_limited" as const : "http_error" as const, durationMs: Date.now() - aiStartedAt };
+  if (!response.ok) return { result: null, reason: response.status === 429 ? "rate_limited" as const : (`http_error_${response.status}` as const), durationMs: Date.now() - aiStartedAt };
 
   const data = await response.json().catch(() => null);
   const raw = data?.choices?.[0]?.message?.content;
@@ -402,15 +402,14 @@ export async function POST(req: Request) {
       findings.push({ name: "Redirects", status: "pass", detail: `The public URL completed ${redirects} redirect${redirects === 1 ? "" : "s"} before the final response.`, category: "reliability" });
     }
 
-    const elapsedMs = Date.now() - startedAt;
-    if (elapsedMs <= 3000) {
-      findings.push({ name: "Response time", status: "pass", detail: `The scan completed in about ${elapsedMs} ms.`, category: "reliability" });
-    } else if (elapsedMs <= 7000) {
+    if (fetchDurationMs <= 3000) {
+      findings.push({ name: "Response time", status: "pass", detail: `The target responded in about ${fetchDurationMs} ms.`, category: "reliability" });
+    } else if (fetchDurationMs <= 7000) {
       score -= 2;
-      findings.push({ name: "Response time", status: "warn", detail: `The scan took about ${elapsedMs} ms. Slower responses may affect user experience.`, category: "reliability", penalty: 2 });
+      findings.push({ name: "Response time", status: "warn", detail: `The target responded in about ${fetchDurationMs} ms. Slower responses may affect user experience.`, category: "reliability", penalty: 2 });
     } else {
       score -= 5;
-      findings.push({ name: "Response time", status: "warn", detail: `The scan took about ${elapsedMs} ms. This is a high-latency signal for a public page.`, category: "reliability", penalty: 5 });
+      findings.push({ name: "Response time", status: "warn", detail: `The target responded in about ${fetchDurationMs} ms. This is a high-latency signal for a public page.`, category: "reliability", penalty: 5 });
     }
 
     const contentType = headers["content-type"] || "";
@@ -436,7 +435,7 @@ export async function POST(req: Request) {
     }
 
     const descriptionMatch = getMetaContent(html, "description");
-    if (descriptionMatch?.[1]?.trim()) {
+    if (descriptionMatch?.trim()) {
       findings.push({ name: "Meta description", status: "pass", detail: "A non-empty meta description was detected.", category: "seo" });
     } else if (descriptionMatch !== null) {
       score -= 1;
