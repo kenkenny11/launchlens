@@ -170,9 +170,7 @@ async function improveWithGroq(findings: Finding[], score: number) {
       typeof parsed.fixPrompt !== "string" ||
       !parsed.summary.trim() ||
       !parsed.fixPrompt.trim()
-    ) {
-      return null;
-    }
+    ) return null;
     return {
       summary: parsed.summary.trim().slice(0, 600),
       fixPrompt: parsed.fixPrompt.trim().slice(0, 5000),
@@ -227,39 +225,39 @@ export async function POST(req: Request) {
 
     const contentType = headers["content-type"] || "";
     if (contentType.includes("text/html")) {
-      findings.push({ name: "HTML document", status: "pass", detail: "The response declares an HTML content type." , category: categoryFor("HTML document") });
+      findings.push({ name: "HTML document", status: "pass", detail: "The response declares an HTML content type.", category: "reliability" });
     } else {
       score -= 8;
       findings.push({ name: "HTML document", status: "warn", detail: `The response content type is ${contentType || "unknown"}, so page-level checks may be incomplete.`, category: "reliability" });
     }
 
     if (/<title\b[^>]*>[\s\S]*?<\/title>/i.test(html)) {
-      findings.push({ name: "Page title", status: "pass", detail: "A document title was detected." , category: categoryFor("Page title") });
+      findings.push({ name: "Page title", status: "pass", detail: "A document title was detected.", category: "seo" });
     } else {
       score -= 5;
-      findings.push({ name: "Page title", status: "warn", detail: "No HTML title was observed." , category: categoryFor("Page title") });
+      findings.push({ name: "Page title", status: "warn", detail: "No HTML title was observed.", category: "seo" });
     }
 
     if (/<meta\s+[^>]*name=["']viewport["']/i.test(html)) {
-      findings.push({ name: "Mobile viewport", status: "pass", detail: "A viewport meta tag was detected." , category: categoryFor("Mobile viewport") });
+      findings.push({ name: "Mobile viewport", status: "pass", detail: "A viewport meta tag was detected.", category: "ux" });
     } else {
       score -= 2;
-      findings.push({ name: "Mobile viewport", status: "warn", detail: "No viewport meta tag was observed. Mobile rendering may still work, but this is a compatibility signal." , category: categoryFor("Mobile viewport") });
+      findings.push({ name: "Mobile viewport", status: "warn", detail: "No viewport meta tag was observed. Mobile rendering may still work, but this is a compatibility signal.", category: "ux" });
     }
 
     if (/<meta\s+[^>]*name=["']description["']/i.test(html)) {
-      findings.push({ name: "Meta description", status: "pass", detail: "A meta description was detected." , category: categoryFor("Meta description") });
+      findings.push({ name: "Meta description", status: "pass", detail: "A meta description was detected.", category: "seo" });
     } else {
       score -= 1;
-      findings.push({ name: "Meta description", status: "warn", detail: "No meta description was observed. This is primarily an SEO/share-preview signal, not proof of a security issue." , category: categoryFor("Meta description") });
+      findings.push({ name: "Meta description", status: "warn", detail: "No meta description was observed. This is primarily an SEO/share-preview signal, not proof of a security issue.", category: "seo" });
     }
 
     const secretPattern = /\b(?:sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{20,}|xox[baprs]-[0-9A-Za-z-]{20,})\b/;
     if (secretPattern.test(html)) {
       score -= 30;
-      findings.push({ name: "Possible exposed secret", status: "fail", detail: "A token-like pattern was detected in the fetched HTML. Treat it as potentially exposed and rotate it after checking the deployed bundle.", category: categoryFor("Possible exposed secret") });
+      findings.push({ name: "Possible exposed secret", status: "fail", detail: "A token-like pattern was detected in the fetched HTML. Treat it as potentially exposed and rotate it after checking the deployed bundle.", category: "security" });
     } else {
-      findings.push({ name: "Public secret pattern", status: "pass", detail: "No common token pattern was detected in the fetched HTML." , category: categoryFor("Public secret pattern") });
+      findings.push({ name: "Public secret pattern", status: "pass", detail: "No common token pattern was detected in the fetched HTML.", category: "security" });
     }
 
     score = Math.max(0, Math.min(100, score));
@@ -272,8 +270,11 @@ export async function POST(req: Request) {
           : "MORE REVIEW NEEDED";
 
     const baseFixPrompt =
-      "Review my deployed application using these LaunchLens findings. Prioritize security and reliability before UX or SEO improvements.\\n\\n" +
-      findings.filter((f) => f.status !== "pass").map((f) => `- [${f.category.toUpperCase()}] ${f.name}: ${f.status} — ${f.detail}`).join("\\n") +
+      "Review my deployed application using these LaunchLens findings. Prioritize security and reliability before UX or SEO improvements.\n\n" +
+      findings
+        .filter((f) => f.status !== "pass")
+        .map((f) => `- [${f.category.toUpperCase()}] ${f.name}: ${f.status} — ${f.detail}`)
+        .join("\n") +
       "\n\nInspect the relevant project files before changing anything. Implement the safest fixes, avoid unrelated changes, and run the project's tests/build.";
 
     const ai = await improveWithGroq(findings, score).catch(() => null);
@@ -286,6 +287,7 @@ export async function POST(req: Request) {
         "This score reflects signals observable from the public URL. It is not a complete security audit and does not inspect private source code, authenticated routes, databases, or server infrastructure.",
       findings,
       fixPrompt: ai?.fixPrompt || baseFixPrompt,
+      aiUsed: Boolean(ai),
     });
   } catch (error) {
     const message =
