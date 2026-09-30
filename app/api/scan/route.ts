@@ -445,6 +445,7 @@ export async function POST(req: Request) {
         : error instanceof Error
           ? error.message
           : "Could not scan that URL.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = /too many scans/i.test(message) ? 429 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
