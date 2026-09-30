@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 
 const MAX_HTML = 300_000;
 const REQUEST_TIMEOUT_MS = 10_000;
+const AI_TIMEOUT_MS = 4_000;
 const MAX_REDIRECTS = 4;
 
 async function readBodyLimit(response: Response, maxBytes: number) {
@@ -172,9 +173,14 @@ function isUsefulReferrerPolicy(value: string) {
 
 async function improveWithGroq(findings: Finding[], score: number) {
   const key = process.env.GROQ_API_KEY;
-  if (!key) return null;
+  if (!key) return { result: null, reason: "missing_key" as const, durationMs: 0 };
+  const aiStartedAt = Date.now();
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const controller = new AbortController();
+  const aiTimer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -212,13 +218,19 @@ async function improveWithGroq(findings: Finding[], score: number) {
         },
       ],
     }),
-  });
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(aiTimer);
+    return { result: null, reason: error instanceof Error && error.name === "AbortError" ? "timeout" as const : "request_error" as const, durationMs: Date.now() - aiStartedAt };
+  }
+  clearTimeout(aiTimer);
 
-  if (!response.ok) return null;
+  if (!response.ok) return { result: null, reason: response.status === 429 ? "rate_limited" as const : "http_error" as const, durationMs: Date.now() - aiStartedAt };
 
   const data = await response.json().catch(() => null);
   const raw = data?.choices?.[0]?.message?.content;
-  if (typeof raw !== "string" || !raw.trim()) return null;
+  if (typeof raw !== "string" || !raw.trim()) return { result: null, reason: "empty_response" as const, durationMs: Date.now() - aiStartedAt };
 
   try {
     const cleaned = raw.trim().replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, "").trim();
@@ -230,13 +242,10 @@ async function improveWithGroq(findings: Finding[], score: number) {
       typeof parsed.fixPrompt !== "string" ||
       !parsed.summary.trim() ||
       !parsed.fixPrompt.trim()
-    ) return null;
-    return {
-      summary: parsed.summary.trim().slice(0, 600),
-      fixPrompt: parsed.fixPrompt.trim().slice(0, 5000),
-    };
+    ) return { result: null, reason: "invalid_response" as const, durationMs: Date.now() - aiStartedAt };
+    return { result: { summary: parsed.summary.trim().slice(0, 600), fixPrompt: parsed.fixPrompt.trim().slice(0, 5000) }, reason: "ok" as const, durationMs: Date.now() - aiStartedAt };
   } catch {
-    return null;
+    return { result: null, reason: "invalid_json" as const, durationMs: Date.now() - aiStartedAt };
   }
 }
 
@@ -282,7 +291,9 @@ export async function POST(req: Request) {
     if (!url) return NextResponse.json({ error: "Enter a valid public http:// or https:// URL." }, { status: 400 });
 
     const startedAt = Date.now();
+    const fetchStartedAt = Date.now();
     const fetched = await fetchPublicPage(url);
+    const fetchDurationMs = Date.now() - fetchStartedAt;
     const response = fetched.response;
     const finalUrl = fetched.finalUrl;
     const redirects = fetched.redirects;
@@ -444,7 +455,8 @@ export async function POST(req: Request) {
         .join("\n") +
       "\n\nInspect the relevant project files before changing anything. Implement the safest fixes, avoid unrelated changes, and run the project's tests/build.";
 
-    const ai = await improveWithGroq(findings, score).catch(() => null);
+    const aiOutcome = await improveWithGroq(findings, score);
+    const ai = aiOutcome.result;
 
     const penaltyTotal = findings.reduce((total, finding) => total + (finding.penalty || 0), 0);
     const categoryPenalties = (["security", "reliability", "ux", "seo", "other"] as const).reduce((acc, category) => {
@@ -460,6 +472,8 @@ export async function POST(req: Request) {
       finalUrl: finalUrl.toString(),
       redirects,
       durationMs,
+      fetchDurationMs,
+      aiDurationMs: aiOutcome.durationMs,
       scannedAt,
       penaltyTotal,
       categoryPenalties,
@@ -469,6 +483,7 @@ export async function POST(req: Request) {
       findings,
       fixPrompt: ai?.fixPrompt || baseFixPrompt,
       aiUsed: Boolean(ai),
+      aiStatus: aiOutcome.reason,
     });
   } catch (error) {
     const message =
