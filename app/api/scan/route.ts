@@ -319,7 +319,11 @@ export async function POST(req: Request) {
     }
 
     const csp = headers["content-security-policy"];
-    if (!hasHeader(headers, "content-security-policy")) {
+    const cspReportOnly = headers["content-security-policy-report-only"];
+    if (!hasHeader(headers, "content-security-policy") && hasHeader(headers, "content-security-policy-report-only")) {
+      score -= 5;
+      findings.push({ name: "Content-Security-Policy", status: "warn", detail: "Only Content-Security-Policy-Report-Only was observed; it reports violations but does not enforce them.", category: "security", penalty: 5 });
+    } else if (!hasHeader(headers, "content-security-policy")) {
       score -= 8;
       findings.push({ name: "Content-Security-Policy", status: "warn", detail: "Header was not observed in the final response.", category: "security", penalty: 8 });
     } else if (!isStrongCsp(csp)) {
