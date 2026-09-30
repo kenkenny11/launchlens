@@ -275,8 +275,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json();
-    const input = typeof body?.url === "string" ? body.url.trim() : "";
+    const requestBody = await req.json();
+    const input = typeof requestBody?.url === "string" ? requestBody.url.trim() : "";
     const url = await parsePublicUrl(input);
     if (!url) return NextResponse.json({ error: "Enter a valid public http:// or https:// URL." }, { status: 400 });
 
@@ -285,13 +285,13 @@ export async function POST(req: Request) {
     const response = fetched.response;
     const finalUrl = fetched.finalUrl;
     const redirects = fetched.redirects;
-    const body = await readBodyLimit(response, MAX_HTML);
-    const html = body.text;
+    const limitedBody = await readBodyLimit(response, MAX_HTML);
+    const html = limitedBody.text;
     const headers = Object.fromEntries(response.headers.entries());
     const findings: Finding[] = [];
     let score = 100;
 
-    if (body.truncated) {
+    if (limitedBody.truncated) {
       findings.push({
         name: "Response body limit",
         status: "warn",
