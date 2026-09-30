@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowRight, CheckCircle2, ShieldAlert, Copy, Loader2, Globe2, Sparkles } from "lucide-react";
 
-type Finding = { name: string; status: "pass" | "warn" | "fail"; detail: string };
+type Finding = { name: string; status: "pass" | "warn" | "fail"; detail: string; category: "security" | "reliability" | "ux" | "seo" | "other" };
 type Result = { score: number; verdict: string; summary: string; findings: Finding[]; fixPrompt: string };
 
 export default function Home() {
@@ -88,7 +88,7 @@ function ResultView({ result }: { result: Result }) {
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {result.findings.map((f, i) => <FindingCard key={i} finding={f}/>)}
+        {(["security","reliability","ux","seo"] as const).map((category) => { const items = result.findings.filter((f) => f.category === category); if (!items.length) return null; return <div key={category} className="sm:col-span-2"><div className="mb-2 text-xs font-medium uppercase tracking-widest text-zinc-600">{category === "ux" ? "UX" : category}</div><div className="grid gap-3 sm:grid-cols-2">{items.map((f, i) => <FindingCard key={i} finding={f}/>)}</div></div>; })}
       </div>
 
       <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
