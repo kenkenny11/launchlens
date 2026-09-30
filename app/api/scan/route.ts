@@ -210,8 +210,42 @@ async function improveWithGroq(findings: Finding[], score: number) {
   }
 }
 
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function getClientKey(req: Request) {
+  const forwarded = req.headers.get("x-forwarded-for");
+  return (forwarded?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown").slice(0, 100);
+}
+
+function checkRateLimit(key: string) {
+  const now = Date.now();
+  const current = rateLimitStore.get(key);
+
+  if (!current || current.resetAt <= now) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true, retryAfter: 60 };
+  }
+
+  current.count += 1;
+  if (current.count > RATE_LIMIT_MAX_REQUESTS) {
+    return { allowed: false, retryAfter: Math.max(1, Math.ceil((current.resetAt - now) / 1000)) };
+  }
+
+  return { allowed: true, retryAfter: Math.max(1, Math.ceil((current.resetAt - now) / 1000)) };
+}
+
 export async function POST(req: Request) {
   try {
+    const limit = checkRateLimit(getClientKey(req));
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many scans. Please wait before trying again." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfter) } }
+      );
+    }
+
     const body = await req.json();
     const input = typeof body?.url === "string" ? body.url.trim() : "";
     const url = await parsePublicUrl(input);
