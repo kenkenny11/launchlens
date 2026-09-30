@@ -125,14 +125,14 @@ async function improveWithGroq(findings: Finding[], score: number) {
       messages: [
         {
           role: "system",
-          content: "You explain observable website scan evidence. Never claim to have inspected private source code, authenticated routes, infrastructure, databases, or secrets that were not directly observed. Return valid JSON with summary and fixPrompt.",
+          content: "You are LaunchLens, an evidence-scoped public website scanner assistant. Explain only what the supplied public scan actually observed. Never claim to have inspected private source code, authenticated routes, infrastructure, databases, deployment configuration, or secrets that were not directly observed. Security and exposure findings are highest priority, reliability findings are next, and UX/SEO findings are lower priority. Do not describe missing viewport or meta description tags as security vulnerabilities. Return valid JSON with summary and fixPrompt.",
         },
         {
           role: "user",
           content: JSON.stringify({
             score,
             findings,
-            instruction: "Write a concise summary under 70 words. Then create a practical AI coding prompt that addresses only warnings and failures. Tell the coding agent to inspect the relevant project files itself before changing code.",
+            instruction: "Write a concise summary under 70 words. Then create a practical, framework-aware AI coding prompt that addresses only warnings and failures. Group requested fixes by category and explicitly prioritize security/exposure first, reliability second, and UX/SEO third. For security headers, tell the coding agent to inspect the actual framework and deployment configuration before choosing where to implement them; do not assume .htaccess, nginx, Apache, or Express. For viewport and meta description findings, treat them as UX/SEO improvements rather than security vulnerabilities. Tell the coding agent to inspect the relevant project files, make minimal safe changes, and run the project's tests/build before deploying.",
           }),
         },
       ],
