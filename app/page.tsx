@@ -22,8 +22,11 @@ export default function Home() {
     setLoading(true);
     try {
       const r = await fetch("/api/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: url.trim() }) });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Scan failed");
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const message = data.error || (r.status === 429 ? "Too many scans. Please wait and try again." : "Scan failed.");
+        throw new Error(message);
+      }
       setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Scan failed");
