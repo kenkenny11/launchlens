@@ -9,11 +9,12 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 4;
 
 async function readBodyLimit(response: Response, maxBytes: number) {
-  if (!response.body) return "";
+  if (!response.body) return { text: "", truncated: false };
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let total = 0;
   let text = "";
+  let truncated = false;
 
   try {
     while (total < maxBytes) {
@@ -23,13 +24,16 @@ async function readBodyLimit(response: Response, maxBytes: number) {
       const chunk = value.byteLength > remaining ? value.subarray(0, remaining) : value;
       total += chunk.byteLength;
       text += decoder.decode(chunk, { stream: total < maxBytes });
-      if (value.byteLength > remaining) break;
+      if (value.byteLength > remaining) {
+        truncated = true;
+        break;
+      }
     }
   } finally {
     await reader.cancel().catch(() => undefined);
   }
 
-  return text + (total >= maxBytes ? decoder.decode() : "");
+  return { text: text + (truncated ? decoder.decode() : ""), truncated };
 }
 
 function isPrivateIPv4(ip: string) {
@@ -281,10 +285,20 @@ export async function POST(req: Request) {
     const response = fetched.response;
     const finalUrl = fetched.finalUrl;
     const redirects = fetched.redirects;
-    const html = await readBodyLimit(response, MAX_HTML);
+    const body = await readBodyLimit(response, MAX_HTML);
+    const html = body.text;
     const headers = Object.fromEntries(response.headers.entries());
     const findings: Finding[] = [];
     let score = 100;
+
+    if (body.truncated) {
+      findings.push({
+        name: "Response body limit",
+        status: "warn",
+        detail: "The response body exceeded the 300 KB scan limit. Page-level checks only cover the portion that was fetched.",
+        category: "reliability",
+      });
+    }
 
     if (finalUrl.protocol === "https:") {
       score += addFinding(findings, "HTTPS", "pass", "The submitted URL uses HTTPS.");
@@ -385,15 +399,20 @@ export async function POST(req: Request) {
       findings.push({ name: "Page title", status: "warn", detail: "No HTML title was observed.", category: "seo" });
     }
 
-    if (/<meta\s+[^>]*name=["']viewport["']/i.test(html)) {
-      findings.push({ name: "Mobile viewport", status: "pass", detail: "A viewport meta tag was detected.", category: "ux" });
+    if (/<meta\s+[^>]*(?:name=["']viewport["'][^>]*content=|content=["'][^"']+["'][^>]*name=["']viewport["'])/i.test(html)) {
+      findings.push({ name: "Mobile viewport", status: "pass", detail: "A viewport meta tag with a content value was detected.", category: "ux" });
     } else {
       score -= 2;
       findings.push({ name: "Mobile viewport", status: "warn", detail: "No viewport meta tag was observed. Mobile rendering may still work, but this is a compatibility signal.", category: "ux" });
     }
 
-    if (/<meta\s+[^>]*name=["']description["']/i.test(html)) {
-      findings.push({ name: "Meta description", status: "pass", detail: "A meta description was detected.", category: "seo" });
+    const descriptionMatch = html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) ||
+      html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i);
+    if (descriptionMatch?.[1]?.trim()) {
+      findings.push({ name: "Meta description", status: "pass", detail: "A non-empty meta description was detected.", category: "seo" });
+    } else if (descriptionMatch) {
+      score -= 1;
+      findings.push({ name: "Meta description", status: "warn", detail: "A meta description tag was found, but its content is empty.", category: "seo" });
     } else {
       score -= 1;
       findings.push({ name: "Meta description", status: "warn", detail: "No meta description was observed. This is primarily an SEO/share-preview signal, not proof of a security issue.", category: "seo" });
