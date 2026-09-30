@@ -114,36 +114,69 @@ function addFinding(findings: Finding[], name: string, status: Finding["status"]
 async function improveWithGroq(findings: Finding[], score: number) {
   const key = process.env.GROQ_API_KEY;
   if (!key) return null;
+
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
     body: JSON.stringify({
       model: "openai/gpt-oss-120b",
       temperature: 0.2,
-      max_completion_tokens: 700,
+      max_completion_tokens: 900,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
-          content: "You are LaunchLens, an evidence-scoped public website scanner assistant. Explain only what the supplied public scan actually observed. Never claim to have inspected private source code, authenticated routes, infrastructure, databases, deployment configuration, or secrets that were not directly observed. Security and exposure findings are highest priority, reliability findings are next, and UX/SEO findings are lower priority. Do not describe missing viewport or meta description tags as security vulnerabilities. Return valid JSON with summary and fixPrompt.",
+          content:
+            "You are LaunchLens, an evidence-scoped public website scanner assistant. " +
+            "Explain only what the supplied public scan observed. Never claim to have inspected private source code, " +
+            "authenticated routes, infrastructure, databases, deployment configuration, or secrets that were not observed. " +
+            "Security/exposure findings have highest priority, reliability second, UX/SEO third. " +
+            "Missing viewport or meta description tags are not security vulnerabilities. " +
+            "Return only valid JSON with exactly two string fields: summary and fixPrompt.",
         },
         {
           role: "user",
           content: JSON.stringify({
             score,
             findings,
-            instruction: "Write a concise summary under 70 words. Then create a practical, framework-aware AI coding prompt that addresses only warnings and failures. Group requested fixes by category and explicitly prioritize security/exposure first, reliability second, and UX/SEO third. For security headers, tell the coding agent to inspect the actual framework and deployment configuration before choosing where to implement them; do not assume .htaccess, nginx, Apache, or Express. For viewport and meta description findings, treat them as UX/SEO improvements rather than security vulnerabilities. Tell the coding agent to inspect the relevant project files, make minimal safe changes, and run the project's tests/build before deploying.",
+            instruction:
+              "Write a concise summary under 70 words. Then write a practical coding-agent prompt addressing only warnings and failures. " +
+              "Group fixes by category and prioritize SECURITY/EXPOSURE, then RELIABILITY, then UX/SEO. " +
+              "For security headers, inspect the actual framework and deployment configuration before choosing implementation; " +
+              "never assume .htaccess, nginx, Apache, or Express. Treat viewport as UX and meta description as SEO. " +
+              "Tell the coding agent to inspect relevant files first, make minimal safe changes, and run tests/build before deployment.",
           }),
         },
       ],
     }),
   });
-  if (!response.ok) throw new Error("Groq request failed");
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) return null;
+
+  if (!response.ok) return null;
+
+  const data = await response.json().catch(() => null);
+  const raw = data?.choices?.[0]?.message?.content;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+
   try {
-    return JSON.parse(content) as { summary: string; fixPrompt: string };
+    const cleaned = raw.trim().replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, "").trim();
+    const parsed = JSON.parse(cleaned);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      typeof parsed.summary !== "string" ||
+      typeof parsed.fixPrompt !== "string" ||
+      !parsed.summary.trim() ||
+      !parsed.fixPrompt.trim()
+    ) {
+      return null;
+    }
+    return {
+      summary: parsed.summary.trim().slice(0, 600),
+      fixPrompt: parsed.fixPrompt.trim().slice(0, 5000),
+    };
   } catch {
     return null;
   }
