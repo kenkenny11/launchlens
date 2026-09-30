@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { ArrowRight, CheckCircle2, ShieldAlert, Copy, Loader2, Globe2, Sparkles } from "lucide-react";
 
-type Finding = { name: string; status: "pass" | "warn" | "fail"; detail: string; category: "security" | "reliability" | "ux" | "seo" | "other" };
-type Result = { score: number; verdict: string; finalUrl: string; redirects: number; summary: string; findings: Finding[]; fixPrompt: string };
+type Finding = { name: string; status: "pass" | "warn" | "fail"; detail: string; category: "security" | "reliability" | "ux" | "seo" | "other"; penalty?: number };
+type Result = { score: number; verdict: string; finalUrl: string; redirects: number; durationMs: number; scannedAt: string; penaltyTotal: number; categoryPenalties: Record<"security" | "reliability" | "ux" | "seo" | "other", number>; summary: string; findings: Finding[]; fixPrompt: string; aiUsed: boolean };
+
 
 export default function Home() {
   const [url, setUrl] = useState("");
@@ -82,12 +83,13 @@ function ResultView({ result }: { result: Result }) {
           <div className={"mt-2 text-6xl font-semibold tracking-tight " + scoreTone}>{result.score}<span className="text-2xl text-zinc-600">/100</span></div>
           <p className="mt-4 max-w-xl text-sm leading-6 text-zinc-400">{result.summary}</p>
           <div className="mt-6 border-t border-zinc-900 pt-5">
-            <div className="flex items-center justify-between text-xs text-zinc-500"><span>Signal breakdown</span><span>100 starting points</span></div>
+            <div className="flex items-center justify-between text-xs text-zinc-500"><span>Signal breakdown</span><span>100 starting points · {result.penaltyTotal} points deducted</span></div>
             <div className="mt-3 flex flex-wrap gap-2">
               {(["security","reliability","ux","seo"] as const).map((category) => {
                 const items = result.findings.filter((f) => f.category === category);
                 const warnings = items.filter((f) => f.status !== "pass").length;
-                return items.length ? <span key={category} className="rounded-full bg-zinc-900 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-500">{category === "ux" ? "UX" : category}: {warnings ? warnings + " issue" + (warnings === 1 ? "" : "s") : "clear"}</span> : null;
+                const penalty = result.categoryPenalties[category] || 0;
+                return items.length ? <span key={category} className="rounded-full bg-zinc-900 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-500">{category === "ux" ? "UX" : category}: {warnings ? warnings + " issue" + (warnings === 1 ? "" : "s") : "clear"}{penalty ? ` · −${penalty}` : ""}</span> : null;
               })}
             </div>
           </div>
@@ -95,7 +97,7 @@ function ResultView({ result }: { result: Result }) {
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6">
           <p className="text-xs uppercase tracking-widest text-zinc-500">Scan target</p>
           <p className="mt-2 truncate text-sm text-zinc-300">{result.finalUrl}</p>
-          <p className="mt-1 text-xs text-zinc-600">{result.redirects} redirect{result.redirects === 1 ? "" : "s"} followed</p>
+          <p className="mt-1 text-xs text-zinc-600">{result.redirects} redirect{result.redirects === 1 ? "" : "s"} followed · {result.durationMs} ms scan</p>
           <div className="mt-5 border-t border-zinc-900 pt-5">
             <p className="text-xs uppercase tracking-widest text-zinc-500">Status</p>
             <p className="mt-2 text-xl font-semibold">{result.verdict}</p>
@@ -107,13 +109,25 @@ function ResultView({ result }: { result: Result }) {
         </div>
       </div>
 
+      <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div><h2 className="font-semibold">Score calculation</h2><p className="mt-1 text-xs text-zinc-500">Transparent deductions from the 100-point starting score.</p></div>
+          <span className="text-xs text-zinc-500">{result.score}/100</span>
+        </div>
+        <div className="mt-4 space-y-2 text-xs">
+          <div className="flex justify-between rounded-lg bg-zinc-900/70 px-3 py-2"><span className="text-zinc-400">Starting points</span><span className="text-zinc-300">100</span></div>
+          {result.findings.filter((f) => (f.penalty || 0) > 0).map((f, i) => <div key={i} className="flex justify-between gap-4 px-3 py-1"><span className="text-zinc-500">{f.name}</span><span className="shrink-0 text-amber-400">−{f.penalty}</span></div>)}
+          <div className="mt-2 flex justify-between border-t border-zinc-900 px-3 pt-3 font-medium"><span className="text-zinc-400">Final score</span><span className={scoreTone}>{result.score}/100</span></div>
+        </div>
+      </div>
+
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {(["security","reliability","ux","seo"] as const).map((category) => { const items = result.findings.filter((f) => f.category === category); if (!items.length) return null; return <div key={category} className="sm:col-span-2"><div className="mb-2 text-xs font-medium uppercase tracking-widest text-zinc-600">{category === "ux" ? "UX" : category}</div><div className="grid gap-3 sm:grid-cols-2">{items.map((f, i) => <FindingCard key={i} finding={f}/>)}</div></div>; })}
       </div>
 
       <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
         <div className="flex items-center justify-between gap-4">
-          <div><h2 className="font-semibold">AI fix prompt</h2><p className="mt-1 text-xs text-zinc-500">Paste this into your coding agent.</p></div>
+          <div><h2 className="font-semibold">AI fix prompt</h2><p className="mt-1 text-xs text-zinc-500">{result.aiUsed ? "Generated from the observed findings." : "Fallback prompt generated from the observed findings."}</p></div>
           <button onClick={copy} className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-xs hover:bg-zinc-900"><Copy size={14}/>Copy</button>
         </div>
         <pre className="mt-5 whitespace-pre-wrap rounded-xl bg-black/40 p-4 text-xs leading-6 text-zinc-300">{result.fixPrompt}</pre>
